@@ -2,7 +2,7 @@ Lab 0 Writeup
 =============
 
 My name: [your name here]
-
+Potter
 My SUNet ID: [your sunetid here]
 
 This lab took me about [n] hours to do.

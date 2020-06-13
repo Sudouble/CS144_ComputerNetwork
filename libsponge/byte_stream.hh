@@ -84,6 +84,15 @@ class ByteStream {
     //! Total number of bytes popped
     size_t bytes_read() const;
     //!@}
+
+private:
+  size_t m_capacity;
+  std::string str_buffer = "";
+  size_t m_byte_written = 0;
+  size_t m_byte_read = 0;
+  bool b_cannot_write = false;
+  
+  bool _eof = false;
 };
 
 #endif  // SPONGE_LIBSPONGE_BYTE_STREAM_HH

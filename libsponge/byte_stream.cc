@@ -16,34 +16,69 @@ void DUMMY_CODE(Targs &&... /* unused */) {}
 
 using namespace std;
 
-ByteStream::ByteStream(const size_t capacity) { DUMMY_CODE(capacity); }
+ByteStream::ByteStream(const size_t capacity) :
+    m_capacity(capacity)
+{ 
+}
 
 size_t ByteStream::write(const string &data) {
-    DUMMY_CODE(data);
-    return {};
+	if (input_ended())
+		return 0;
+	
+    size_t len = data.length();
+
+    size_t can_write = (remaining_capacity() >= len)? len : remaining_capacity();
+    
+	str_buffer += data.substr(0, can_write);
+	m_capacity -= can_write;
+	
+    m_byte_written += can_write;
+
+    return can_write;
 }
 
 //! \param[in] len bytes will be copied from the output side of the buffer
 string ByteStream::peek_output(const size_t len) const {
-    DUMMY_CODE(len);
-    return {};
+    return str_buffer.substr(0, len);;
 }
 
 //! \param[in] len bytes will be removed from the output side of the buffer
-void ByteStream::pop_output(const size_t len) { DUMMY_CODE(len); }
+void ByteStream::pop_output(const size_t len) { 
 
-void ByteStream::end_input() {}
+    size_t can_read = (buffer_size() >= len) ? len : buffer_size();
 
-bool ByteStream::input_ended() const { return {}; }
+    str_buffer = str_buffer.substr(can_read);
 
-size_t ByteStream::buffer_size() const { return {}; }
+	m_capacity += can_read;
+    m_byte_read += can_read;
+	
+	if (buffer_empty() && input_ended())
+        _eof = true;
+}
 
-bool ByteStream::buffer_empty() const { return {}; }
+void ByteStream::end_input() {
+	b_cannot_write = true;
+	
+	if (buffer_empty())
+		_eof = true;
+}
 
-bool ByteStream::eof() const { return false; }
+bool ByteStream::input_ended() const { 
+    return b_cannot_write; 
+}
 
-size_t ByteStream::bytes_written() const { return {}; }
+size_t ByteStream::buffer_size() const {
+    return str_buffer.size();
+}
 
-size_t ByteStream::bytes_read() const { return {}; }
+bool ByteStream::buffer_empty() const { 
+    return str_buffer.size() == 0;
+}
 
-size_t ByteStream::remaining_capacity() const { return {}; }
+bool ByteStream::eof() const { return _eof; }
+
+size_t ByteStream::bytes_written() const { return {m_byte_written}; }
+
+size_t ByteStream::bytes_read() const { return {m_byte_read}; }
+
+size_t ByteStream::remaining_capacity() const { return m_capacity; }
