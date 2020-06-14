@@ -5,15 +5,37 @@
 
 #include <cstdint>
 #include <string>
+#include <queue>
+#include <map>
+
+typedef struct ST_TCP_SEGMENT{
+	uint64_t _index = 0;
+	std::string str = "";
+	bool _eof = false;
+	
+	bool operator>(const ST_TCP_SEGMENT &right) const
+	{
+		if (this->_index > right._index)
+			return true;
+		return false;
+	}
+}ST_SEGMENT;
+
+
 
 //! \brief A class that assembles a series of excerpts from a byte stream (possibly out of order,
 //! possibly overlapping) into an in-order byte stream.
 class StreamReassembler {
   private:
-    // Your code here -- add private members as necessary.
+    // Your code here -- add private members as necessary.	
+	std::priority_queue<ST_SEGMENT, std::vector<ST_SEGMENT>, std::greater<ST_SEGMENT> > _PR_queue;
+	uint64_t _current_waiting_index;
+	uint64_t _remain_bytes;
+	std::map<uint64_t, bool> _map_nottouched_info; // true is represented as not reassembled.
+	
 
     ByteStream _output;  //!< The reassembled in-order byte stream
-    size_t _capacity;    //!< The maximum number of bytes
+    size_t _capacity;    //!< The maximum number of bytes	
 
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.
