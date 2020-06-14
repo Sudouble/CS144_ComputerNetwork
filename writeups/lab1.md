@@ -6,15 +6,20 @@ My name: [your name here]
 My SUNet ID: [your sunetid here]
 
 This lab took me about [n] hours to do.
-already 1hour
+already 1hour + 3hour
 Program Structure and Design of the StreamReassembler:
-[]
+
+using priority_queue, dequeue the min index always.
+using map to store the overlapped condition.
 
 Implementation Challenges:
-[] segment falut
+[] 
+segment falut
+running time too long.
 
 Remaining Bugs:
 []
+none
 
 - Optional: I had unexpected difficulty with: [describe]
 
