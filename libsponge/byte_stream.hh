@@ -88,8 +88,8 @@ class ByteStream {
 private:
   size_t m_capacity;
   std::string str_buffer = "";
-  size_t m_byte_written = 0;
-  size_t m_byte_read = 0;
+  size_t m_byte_written;
+  size_t m_byte_read;
   bool b_cannot_write = false;
   
   bool _eof = false;

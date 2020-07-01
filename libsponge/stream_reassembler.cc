@@ -45,18 +45,25 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 	for (size_t begin_index = index; begin_index < size_end; ++begin_index)
 	{
 		_map_nottouched_info[begin_index] = true;
+		
+		// cerr << "size:" << _map_nottouched_info.size() << " ,data:" << data << endl;
 	}
 	_remain_bytes = _map_nottouched_info.size();
 	// deal with overlapping end
 	
 	if (_PR_queue.size() == 0 || _output.input_ended())
-		return;
+		return;	
 	
 	ST_SEGMENT stSg = _PR_queue.top();
+	
+	//cerr << "index:" << stSg._index << " currentIndex:" << index << " _:"<< _current_waiting_index << endl;
 	while (_PR_queue.size() > 0 && stSg._index <= _current_waiting_index)
 	{
-		// deal with dup
+		// deal with dup		
+		
 		uint64_t offset = _current_waiting_index - stSg._index;
+		
+		// cerr << "current:" << stSg.str << " ,offset:" << offset;
 		if (offset < stSg.str.size())
 		{
 			string str_write = stSg.str.substr(offset);
@@ -64,10 +71,15 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 			
 			_current_waiting_index = _output.bytes_written();
 			_remain_bytes -= size_just_written;
+			
+			// cerr << " remain:" << _remain_bytes << " written:" << size_just_written << endl;
+						
 			// deal with overlapping 
-			for (size_t begin_index = offset; begin_index < (offset+size_just_written); ++begin_index)
+			for (size_t begin_index = stSg._index; begin_index < (stSg._index+size_just_written); ++begin_index)
 			{
 				_map_nottouched_info.erase(begin_index);
+				
+				//cerr << "erased:" << begin_index << endl;
 			}
 			// deal with overlapping end
 		}
@@ -83,6 +95,8 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 		// look next
 		stSg = _PR_queue.top();
 	}
+	
+	// cerr << "unassembled_bytes:" << unassembled_bytes() << " size:" << _map_nottouched_info.size() << endl;
 }
 
 size_t StreamReassembler::unassembled_bytes() const { 
