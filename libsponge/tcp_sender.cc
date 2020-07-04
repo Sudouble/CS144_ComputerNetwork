@@ -145,7 +145,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 	// check earliest segment	
 	_retransmissionTimer += ms_since_last_tick;
 	
-	cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
+	//cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
 	
 	if (_retransmissionTimer >= _rto)
 	{
