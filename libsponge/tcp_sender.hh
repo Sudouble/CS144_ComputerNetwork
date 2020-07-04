@@ -5,9 +5,20 @@
 #include "tcp_config.hh"
 #include "tcp_segment.hh"
 #include "wrapping_integers.hh"
+#include <map>
 
 #include <functional>
 #include <queue>
+
+typedef struct RETRANSSMIT_PACKET{
+	TCPSegment tcpSegment{};
+	size_t send_time;
+	RETRANSSMIT_PACKET() :
+	send_time(0)
+	{
+		
+	}
+}ST_RETRANSSMIT_PACKET;
 
 //! \brief The "sender" part of a TCP implementation.
 
@@ -31,6 +42,16 @@ class TCPSender {
 
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
+	uint64_t _alive_time{0};
+	unsigned int _rto{0};
+	unsigned int _retransmissionTimer{0};
+	unsigned int _consecutive_retransmission{0};
+	size_t _byte_in_flight{0};
+	uint16_t _notifyWinSize{1};
+	bool _fin_sent{false};
+	
+	
+	std::map<uint64_t, ST_RETRANSSMIT_PACKET> mapOutstandingSegment = {};
 
   public:
     //! Initialize a TCPSender
@@ -75,7 +96,9 @@ class TCPSender {
     //! \note These must be dequeued and sent by the TCPConnection,
     //! which will need to fill in the fields that are set by the TCPReceiver
     //! (ackno and window size) before sending.
-    std::queue<TCPSegment> &segments_out() { return _segments_out; }
+    std::queue<TCPSegment> &segments_out() { 
+		return _segments_out; 
+	}
     //!@}
 
     //! \name What is the next sequence number? (used for testing)
