@@ -97,6 +97,8 @@ class TCPConnection {
     TCPConnection(const TCPConnection &other) = delete;
     TCPConnection &operator=(const TCPConnection &other) = delete;
     //!@}
+	
+	void test_end();
 };
 
 #endif  // SPONGE_LIBSPONGE_TCP_FACTORED_HH

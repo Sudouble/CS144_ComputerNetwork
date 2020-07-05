@@ -26,22 +26,55 @@ size_t TCPConnection::unassembled_bytes() const {
 }
 
 size_t TCPConnection::time_since_last_segment_received() const {
-	return _last_seg_recv_time;
+	return _tick_time - _last_seg_recv_time;
 }
 
 void TCPConnection::segment_received(const TCPSegment &seg) { 
 	_last_seg_recv_time = _tick_time;
 	
+	const TCPHeader &header = seg.header();
 	// deal with reset flag
-	if (seg.header().rst)
+	if (header.rst)
 	{
 		_sender.stream_in().set_error();
 		_receiver.stream_out().set_error();
 	}
 	else
 	{
-		_receiver.segment_received(seg);
+		bool recv_result = _receiver.segment_received(seg);
+		bool ack_result = false;
+		bool has_ack_result = false;
+		if (recv_result == true)
+		{			
+			if (header.ack == true)
+			{
+				// deal ack
+				ack_result = _sender.ack_received(header.ackno, header.win);				
+				has_ack_result = true;
+			}
+			else
+			{
+				WrappingInt32 isn = _cfg.fixed_isn.value_or(WrappingInt32{random_device()()});
+				// send ack
+				TCPSegment segAck;
+				segAck.header().ack = true;
+				segAck.header().ackno = wrap(_sender.next_seqno_absolute(), isn);
+				
+				_segments_out.push(segAck);
+			}
+		}
+		
+		if (not recv_result || (not ack_result && has_ack_result))
+		{
+			TCPSegment segRev;
+			segRev.header().ackno = header.ackno;
+			segRev.header().win = header.win;
+			
+			_segments_out.push(segRev);
+		}
 	}
+	
+	test_end();
 }
 
 bool TCPConnection::active() const {
@@ -52,9 +85,12 @@ bool TCPConnection::active() const {
 	if (_sender.stream_in().input_ended() 
 		&& _receiver.stream_out().input_ended()
 		&& _sender.bytes_in_flight() == 0) // all acked
-		return true;
+		{
+			return false;
+		}
 	
-	return false;
+	// linger connection
+	return _linger_after_streams_finish;
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -85,6 +121,8 @@ size_t TCPConnection::write(const string &data) {
 		_sender.segments_out().pop();
 	}
 	
+	test_end();
+	
     return n_size_write;
 }
 
@@ -113,6 +151,12 @@ void TCPConnection::end_input_stream() {
 		
 		_segments_out.push(segment);
 		_sender.segments_out().pop();
+	}
+	
+	// _linger_after_streams_finish
+	if (_receiver.stream_out().input_ended() && _sender.stream_in().eof())
+	{
+		_linger_after_streams_finish = false;
 	}
 }
 
@@ -150,4 +194,16 @@ TCPConnection::~TCPConnection() {
     } catch (const exception &e) {
         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;
     }
+}
+
+void TCPConnection::test_end()
+{
+	if (_linger_after_streams_finish 
+		&& _sender.stream_in().input_ended() 
+		&& _receiver.stream_out().input_ended()
+		&& _sender.bytes_in_flight() == 0
+		&& time_since_last_segment_received() > 10*_cfg.rt_timeout)
+	{
+		_linger_after_streams_finish = false;
+	}
 }
