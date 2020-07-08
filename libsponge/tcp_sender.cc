@@ -161,8 +161,8 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 			//cerr << "tick queue size:" << _segments_out.size() << endl;
 			_consecutive_retransmission++;
 		}
-		
-		_retransmissionTimer = 0;				
+
+		_retransmissionTimer = 0;
 	}
 	
 	//cerr << "tick queue size 2:" << _segments_out.size() << endl;

@@ -42,7 +42,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 		if (not ack_result)
 			b_send_empty = true;
 		else
-			_sender.fill_window(); // send ACK		
+			_sender.fill_window(); // send next frame
 	}
 
 	bool recv_recv = _receiver.segment_received(seg);
@@ -75,6 +75,11 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 		b_send_empty = true;
 	}
 
+	// cerr << "seg recved:" << recv_recv
+	// 	 << " ,seg leng:" << seg.length_in_sequence_space() 
+	// 	 << " ,send_empty:" << b_send_empty
+	// 	 << endl;
+
 	if (b_send_empty)
 	{
 		// if the ackno is missing, don't send back an ACK.
@@ -89,18 +94,10 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 
 bool TCPConnection::active() const {
 	// check byteStream of sender and reciever
-	if (_sender.stream_in().error() || _receiver.stream_out().error())
+	if (_sender.stream_in().error() && _receiver.stream_out().error())
 		return false;
-	
-	if (_sender.stream_in().input_ended() 
-		&& _receiver.stream_out().input_ended()
-		&& _sender.bytes_in_flight() == 0) // all acked
-		{
-			return false;
-		}
-	
-	// linger connection
-	return _linger_after_streams_finish;
+
+	return !_clean_shutdown;
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -135,6 +132,8 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
 	_sender.tick(ms_since_last_tick);
 	
 	fill_queue();
+
+	test_end();
 }
 
 void TCPConnection::end_input_stream() {
@@ -183,13 +182,19 @@ TCPConnection::~TCPConnection() {
 
 void TCPConnection::test_end()
 {
-	if (_linger_after_streams_finish 
-		&& _sender.stream_in().input_ended() 
-		&& _receiver.stream_out().input_ended()
-		&& _sender.bytes_in_flight() == 0
-		&& time_since_last_segment_received() > 10*_cfg.rt_timeout)
+	if (_receiver.stream_out().input_ended()
+		&& not _sender.stream_in().eof())// all received and sent)
 	{
-		_linger_after_streams_finish = false;
+		_linger_after_streams_finish = true;
+	}
+
+	// Prerequest of #1 and #3
+	if (_receiver.unassembled_bytes() == 0
+		&& _receiver.stream_out().eof()
+		&& _sender.bytes_in_flight() == 0
+		&& time_since_last_segment_received() >= 10*_cfg.rt_timeout)
+	{
+		_clean_shutdown = true;
 	}
 }
 
