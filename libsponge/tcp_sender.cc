@@ -43,6 +43,7 @@ void TCPSender::fill_window() {
 	if (_next_seqno == 0)
 	{
 		// sync pack
+		_syn_sent = true;
 		tcpSegment.header().syn = true;
 	}
 	else
@@ -149,6 +150,9 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 	
 	if (_retransmissionTimer >= _rto)
 	{
+		if (mapOutstandingSegment.size() == 0)
+			return;
+
 		auto it = mapOutstandingSegment.begin();
 		_segments_out.push(it->second.tcpSegment);
 			

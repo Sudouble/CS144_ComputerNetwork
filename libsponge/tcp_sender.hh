@@ -49,6 +49,7 @@ class TCPSender {
 	size_t _byte_in_flight{0};
 	uint16_t _notifyWinSize{1};
 	bool _fin_sent{false};
+  bool _syn_sent{false};
 	
 	
 	std::map<uint64_t, ST_RETRANSSMIT_PACKET> mapOutstandingSegment = {};
@@ -98,7 +99,7 @@ class TCPSender {
     //! (ackno and window size) before sending.
     std::queue<TCPSegment> &segments_out() { 
 		return _segments_out; 
-	}
+  	}
     //!@}
 
     //! \name What is the next sequence number? (used for testing)
@@ -110,6 +111,9 @@ class TCPSender {
     //! \brief relative seqno for the next byte to be sent
     WrappingInt32 next_seqno() const { return wrap(_next_seqno, _isn); }
     //!@}
+
+    bool IsSYN_Sent() const {return _syn_sent; }
+    bool IsFIN_Sent() const {return _fin_sent; }
 };
 
 #endif  // SPONGE_LIBSPONGE_TCP_SENDER_HH

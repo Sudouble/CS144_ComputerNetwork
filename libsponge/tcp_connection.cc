@@ -33,46 +33,56 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 	_last_seg_recv_time = _tick_time;
 	
 	const TCPHeader &header = seg.header();
+
+	bool b_send_empty = false;
+	if (header.ack && _sender.IsSYN_Sent())
+	{
+		// deal ack
+		bool ack_result = _sender.ack_received(header.ackno, header.win);				
+		if (not ack_result)
+			b_send_empty = true;
+		else
+			_sender.fill_window(); // send ACK		
+	}
+
+	bool recv_recv = _receiver.segment_received(seg);
+    if (!recv_recv) {
+        b_send_empty = true;
+    }
+
+	if (header.syn && not _sender.IsSYN_Sent())
+	{
+		// handshake packet
+		connect();
+		return;
+	}
+
 	// deal with reset flag
 	if (header.rst)
 	{
 		_sender.stream_in().set_error();
 		_receiver.stream_out().set_error();
+		return;
 	}
-	else
+	
+	if (header.fin)
 	{
-		bool recv_result = _receiver.segment_received(seg);
-		bool ack_result = false;
-		bool has_ack_result = false;
-		if (recv_result == true)
-		{			
-			if (header.ack == true)
-			{
-				// deal ack
-				ack_result = _sender.ack_received(header.ackno, header.win);				
-				has_ack_result = true;
-			}
-			else
-			{
-				WrappingInt32 isn = _cfg.fixed_isn.value_or(WrappingInt32{random_device()()});
-				// send ack
-				TCPSegment segAck;
-				segAck.header().ack = true;
-				segAck.header().ackno = wrap(_sender.next_seqno_absolute(), isn);
-				
-				_segments_out.push(segAck);
-			}
-		}
-		
-		if (not recv_result || (not ack_result && has_ack_result))
-		{
-			TCPSegment segRev;
-			segRev.header().ackno = header.ackno;
-			segRev.header().win = header.win;
-			
-			_segments_out.push(segRev);
-		}
+		if(!_sender.IsFIN_Sent())      //send FIN+ACK
+            _sender.fill_window();
+        if (_sender.segments_out().empty())     //send ACK
+            b_send_empty=true;
+	} else if (seg.length_in_sequence_space()) {
+		b_send_empty = true;
 	}
+
+	if (b_send_empty)
+	{
+		// if the ackno is missing, don't send back an ACK.
+        if (_receiver.ackno().has_value() && _sender.segments_out().empty())
+			_sender.send_empty_segment();
+	}
+
+	fill_queue();
 	
 	test_end();
 }
@@ -111,15 +121,7 @@ size_t TCPConnection::write(const string &data) {
     size_t n_size_write = _sender.stream_in().write(data);
 	_sender.fill_window();
 	
-	size_t n_size_count = 0;
-	while(!_sender.segments_out().empty())
-	{
-		TCPSegment segment = _sender.segments_out().front();
-		n_size_count += segment.length_in_sequence_space();
-		
-		_segments_out.push(segment);
-		_sender.segments_out().pop();
-	}
+	fill_queue();
 	
 	test_end();
 	
@@ -132,26 +134,14 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
 	
 	_sender.tick(ms_since_last_tick);
 	
-	while(!_sender.segments_out().empty())
-	{
-		TCPSegment segment = _sender.segments_out().front();
-		
-		_segments_out.push(segment);
-		_sender.segments_out().pop();
-	}
+	fill_queue();
 }
 
 void TCPConnection::end_input_stream() {
 	_sender.stream_in().end_input();
 	_sender.fill_window();
 	
-	while(!_sender.segments_out().empty())
-	{
-		TCPSegment segment = _sender.segments_out().front();
-		
-		_segments_out.push(segment);
-		_sender.segments_out().pop();
-	}
+	fill_queue();
 	
 	// _linger_after_streams_finish
 	if (_receiver.stream_out().input_ended() && _sender.stream_in().eof())
@@ -161,18 +151,13 @@ void TCPConnection::end_input_stream() {
 }
 
 void TCPConnection::connect() {
-	if (not _sync_sent)
+	if (not _sender.IsSYN_Sent())
 	{
 		_sync_sent = true;
 		
 		_sender.fill_window();
-		while(!_sender.segments_out().empty())
-		{
-			TCPSegment segment = _sender.segments_out().front();
-			
-			_segments_out.push(segment);
-			_sender.segments_out().pop();
-		}
+		
+		fill_queue();
 	} else {
 		// say connect already exists.
 	}
@@ -205,5 +190,23 @@ void TCPConnection::test_end()
 		&& time_since_last_segment_received() > 10*_cfg.rt_timeout)
 	{
 		_linger_after_streams_finish = false;
+	}
+}
+
+void TCPConnection::fill_queue()
+{
+	size_t n_size_count = 0;
+	while(!_sender.segments_out().empty())
+	{
+		TCPSegment segment = _sender.segments_out().front();
+		if (_receiver.ackno().has_value()) {  // deal with ack
+        	segment.header().ackno = _receiver.ackno().value();
+        	segment.header().ack = true;
+    	}
+
+		n_size_count += segment.length_in_sequence_space();
+		
+		_segments_out.push(segment);
+		_sender.segments_out().pop();
 	}
 }
