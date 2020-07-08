@@ -43,6 +43,7 @@ void TCPSender::fill_window() {
 	if (_next_seqno == 0)
 	{
 		// sync pack
+		_syn_sent = true;
 		tcpSegment.header().syn = true;
 	}
 	else
@@ -107,10 +108,10 @@ bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 		uint64_t seqno_ = it->first;
 		size_t segment_size = it->second.tcpSegment.length_in_sequence_space();
 		
-		cerr << "   seqno_:" << seqno_ 
-			 << " segment_size:" << segment_size 
-			 << " abs_seqno:" << abs_seqno 
-			 << " byteInFlight:" << _byte_in_flight << endl;
+		// cerr << "   seqno_:" << seqno_ 
+			 // << " segment_size:" << segment_size 
+			 // << " abs_seqno:" << abs_seqno 
+			 // << " byteInFlight:" << _byte_in_flight << endl;
 		if ((seqno_ + segment_size) <= abs_seqno)
 		{			
 			_byte_in_flight -= segment_size;
@@ -122,7 +123,7 @@ bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 			break;
 		}
 	}
-	cout << "  new byteInFlight:" << _byte_in_flight << endl;
+	// cerr << "  new byteInFlight:" << _byte_in_flight << endl;
 	
 	for (auto i: toDelete)
         mapOutstandingSegment.erase(i);
@@ -145,10 +146,13 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 	// check earliest segment	
 	_retransmissionTimer += ms_since_last_tick;
 	
-	cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
+	//cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
 	
 	if (_retransmissionTimer >= _rto)
 	{
+		if (mapOutstandingSegment.size() == 0)
+			return;
+
 		auto it = mapOutstandingSegment.begin();
 		_segments_out.push(it->second.tcpSegment);
 			
@@ -157,8 +161,8 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 			//cerr << "tick queue size:" << _segments_out.size() << endl;
 			_consecutive_retransmission++;
 		}
-		
-		_retransmissionTimer = 0;				
+
+		_retransmissionTimer = 0;
 	}
 	
 	//cerr << "tick queue size 2:" << _segments_out.size() << endl;
