@@ -62,6 +62,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 	{
 		_sender.stream_in().set_error();
 		_receiver.stream_out().set_error();
+		test_end();
 		return;
 	}
 	
@@ -97,7 +98,14 @@ bool TCPConnection::active() const {
 	if (_sender.stream_in().error() && _receiver.stream_out().error())
 		return false;
 
-	return !_clean_shutdown;
+	return (!_clean_shutdown) && (!_passive_close);
+
+	if (_passive_close)
+		return false;
+	else if (_clean_shutdown)
+		return false;
+	
+	return true;
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -141,12 +149,8 @@ void TCPConnection::end_input_stream() {
 	_sender.fill_window();
 	
 	fill_queue();
-	
-	// _linger_after_streams_finish
-	if (_receiver.stream_out().input_ended() && _sender.stream_in().eof())
-	{
-		_linger_after_streams_finish = false;
-	}
+
+	test_end();
 }
 
 void TCPConnection::connect() {
@@ -174,6 +178,9 @@ TCPConnection::~TCPConnection() {
 			seg.header().seqno = wrap(_sender.next_seqno_absolute(), isn);
 			seg.header().rst = true;
 			_segments_out.push(seg);
+
+			_sender.stream_in().set_error();
+			_receiver.stream_out().set_error();
         }
     } catch (const exception &e) {
         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;
@@ -185,16 +192,19 @@ void TCPConnection::test_end()
 	if (_receiver.stream_out().input_ended()
 		&& not _sender.stream_in().eof())// all received and sent)
 	{
-		_linger_after_streams_finish = true;
+		_linger_after_streams_finish = false;
 	}
 
 	// Prerequest of #1 and #3
 	if (_receiver.unassembled_bytes() == 0
 		&& _receiver.stream_out().eof()
 		&& _sender.bytes_in_flight() == 0
-		&& time_since_last_segment_received() >= 10*_cfg.rt_timeout)
+		&& _receiver.stream_out().eof() 
+		&& _sender.IsFIN_Sent())
 	{
-		_clean_shutdown = true;
+		_clean_shutdown |= (time_since_last_segment_received() >= 10*_cfg.rt_timeout);
+
+		_passive_close |= (!_linger_after_streams_finish);
 	}
 }
 
@@ -208,10 +218,26 @@ void TCPConnection::fill_queue()
         	segment.header().ackno = _receiver.ackno().value();
         	segment.header().ack = true;
     	}
+		else if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS)
+		{
+			WrappingInt32 isn = _cfg.fixed_isn.value_or(WrappingInt32{random_device()()});
+
+			segment.header().rst = 1;			
+			segment.header().seqno = wrap(_sender.next_seqno_absolute(), isn);
+		}
+		else
+		{
+			if (_receiver.window_size() < numeric_limits<uint16_t>::max())
+            	segment.header().win = _receiver.window_size();
+        	else
+            	segment.header().win = numeric_limits<uint16_t>::max();
+		}
 
 		n_size_count += segment.length_in_sequence_space();
 		
 		_segments_out.push(segment);
 		_sender.segments_out().pop();
 	}
+
+	// cerr << "TCPConnection::fill_queue() size:" << _segments_out.size() << endl;
 }

@@ -24,6 +24,7 @@ class TCPConnection {
 	size_t _tick_time{0};
 	bool _sync_sent{false};
   bool _clean_shutdown{false};
+  bool _passive_close{false};
 
   public:
     //! \name "Input" interface for the writer

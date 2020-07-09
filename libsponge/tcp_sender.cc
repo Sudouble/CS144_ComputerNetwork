@@ -53,7 +53,7 @@ void TCPSender::fill_window() {
 		//cerr << "writing buffer:" << buffer.copy() << endl;
 		tcpSegment.payload() = buffer;
 		
-		if (_stream.input_ended() && tcpSegment.length_in_sequence_space() < _notifyWinSize)
+		if (_stream.eof() && tcpSegment.length_in_sequence_space() < _notifyWinSize)
 		{
 			tcpSegment.header().fin = true;
 			_fin_sent = true;
@@ -64,6 +64,9 @@ void TCPSender::fill_window() {
 	if (nlen)
 	{
 		tcpSegment.header().seqno = wrap(_next_seqno, _isn);
+		cerr << " _next_seqno:"  << _next_seqno
+			 << " _isn:" << _isn
+			 << " seqno:" << tcpSegment.header().seqno << endl;
 		
 		// to queue
 		_segments_out.push(tcpSegment);
@@ -155,6 +158,12 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 
 		auto it = mapOutstandingSegment.begin();
 		_segments_out.push(it->second.tcpSegment);
+
+		TCPHeader &hdr = it->second.tcpSegment.header();
+		cerr << "hdr info:" << hdr.to_string()
+			 << " payload:" << it->second.tcpSegment.payload().size()
+			 << " segment_size:" << _segments_out.size()
+			 << endl;
 			
 		if (_notifyWinSize!=0 || _next_seqno==1) {	
 			_rto *= 2;		
