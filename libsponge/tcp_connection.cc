@@ -76,11 +76,6 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 		b_send_empty = true;
 	}
 
-	// cerr << "seg recved:" << recv_recv
-	// 	 << " ,seg leng:" << seg.length_in_sequence_space() 
-	// 	 << " ,send_empty:" << b_send_empty
-	// 	 << endl;
-
 	if (b_send_empty)
 	{
 		// if the ackno is missing, don't send back an ACK.
@@ -218,7 +213,8 @@ void TCPConnection::fill_queue()
         	segment.header().ackno = _receiver.ackno().value();
         	segment.header().ack = true;
     	}
-		else if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS)
+		
+		if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS)
 		{
 			WrappingInt32 isn = _cfg.fixed_isn.value_or(WrappingInt32{random_device()()});
 

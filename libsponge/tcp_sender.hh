@@ -113,6 +113,8 @@ class TCPSender {
     WrappingInt32 next_seqno() const { return wrap(_next_seqno, _isn); }
     //!@}
 
+    void send_non_empty_segment(TCPSegment &seg);
+
     bool IsSYN_Sent() const {return _syn_sent; }
     bool IsFIN_Sent() const {return _fin_sent; }
 };
