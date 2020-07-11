@@ -62,14 +62,20 @@ void TCPSender::fill_window() {
 		else{
 			// read ad many as possible, said by Manul if fill_window
 			uint16_t n_read_current = min(_notifyWinSize, static_cast<uint16_t>(max_payload_size));
-			Buffer buffer((_stream.read(n_read_current)));
+			Buffer buffer(std::move(_stream.read(n_read_current)));
+			// cerr << "read from _stream:" << buffer.copy() << endl;
 
-			TCPSegment tcpSegment;	
+			TCPSegment tcpSegment;
 			tcpSegment.payload() = buffer;
+			if (_stream.input_ended() && tcpSegment.length_in_sequence_space() < _notifyWinSize)
+			{
+				tcpSegment.header().fin = true;
+				_fin_sent = true;
+			}
 
 			if (tcpSegment.length_in_sequence_space() == 0)
 				return;
-		
+
 			send_non_empty_segment(tcpSegment);
 			_notifyWinSize -= tcpSegment.length_in_sequence_space();
 		}
@@ -127,6 +133,9 @@ bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 	_consecutive_retransmission = 0;
 	
 	_rto = _initial_retransmission_timeout;
+
+	// fill next
+	fill_window();
 	
     return true;
 }
@@ -140,6 +149,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 	_retransmissionTimer += ms_since_last_tick;
 	
 	//cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
+	cerr << " invoke tick with last_tick:" << ms_since_last_tick << endl;
 	
 	if (_retransmissionTimer >= _rto)
 	{
@@ -186,6 +196,8 @@ void TCPSender::send_non_empty_segment(TCPSegment &seg){
 	stPack.tcpSegment = seg;
 	stPack.send_time = 0;
 	mapOutstandingSegment.insert(make_pair(_next_seqno, stPack));
+
+	cerr << "seg content in send_non_empty_segment:" << seg.header().to_string()<< endl << endl;
 
 	_next_seqno += seg.length_in_sequence_space();
     _byte_in_flight += seg.length_in_sequence_space();

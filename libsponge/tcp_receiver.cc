@@ -80,6 +80,13 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
 			unwrap(hdr.seqno, _isn, _reassembler.stream_out().bytes_written())-1, 
 			hdr.fin);
 	}
+
+	if (hdr.fin && !_fin_recved)
+	{
+		_fin_recved = true;
+		if (hdr.syn && seg.length_in_sequence_space() == 2)
+			stream_out().end_input();
+	}
 		
 	if (hdr.seqno == _ackno) {
         _ackno = wrap(_reassembler.first_unassembled(), _isn) + 1lu; // 加一是因为byte stream不包括对syn和fin编号。

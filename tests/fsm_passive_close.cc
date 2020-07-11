@@ -30,7 +30,6 @@ int main() {
             test_1.execute(Tick(1));
 
             test_1.execute(ExpectState{State::CLOSED});
-            cerr << "test 1 finished." << endl;
         }
 
         // test #2: start in CLOSE_WAIT, close(), throw away first FIN, ack re-tx FIN
@@ -40,14 +39,13 @@ int main() {
             test_2.execute(Tick(4 * cfg.rt_timeout));
 
             test_2.execute(ExpectState{State::CLOSE_WAIT});
-
+            
+            cerr << "invoke close" << endl;
             test_2.execute(Close{});
-            cerr << "just after close." << endl;
             
             test_2.execute(Tick(1));
 
             test_2.execute(ExpectState{State::LAST_ACK});
-            cerr << "before error place." << endl;
             
             TCPSegment seg1 = test_2.expect_seg(ExpectOneSegment{}.with_fin(true), "test 2 falied: bad seg or no FIN");
             cerr << "just after ExpectOneSegment." << endl;

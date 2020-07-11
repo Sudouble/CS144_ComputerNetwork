@@ -20,6 +20,7 @@ int main() {
         // test #1: start in TIME_WAIT, timeout
         {
             TCPTestHarness test_1 = TCPTestHarness::in_time_wait(cfg);
+            cerr << "in_time_wait finished." << endl;
 
             test_1.execute(Tick(10 * cfg.rt_timeout - 1));
 
@@ -32,6 +33,8 @@ int main() {
             test_1.execute(Tick(10 * cfg.rt_timeout));
 
             test_1.execute(ExpectState{State::CLOSED});
+
+            cerr << "test 1 finished." << endl;
         }
 
         // test #2: start in CLOSING, send ack, time out
@@ -54,6 +57,8 @@ int main() {
             test_2.execute(Tick(2));
 
             test_2.execute(ExpectState{State::CLOSED});
+
+            cerr << "test 2 finished." << endl;
         }
 
         // test #3: start in FIN_WAIT_2, send FIN, time out

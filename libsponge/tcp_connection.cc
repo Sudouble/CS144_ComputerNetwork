@@ -34,7 +34,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 	
 	const TCPHeader &header = seg.header();
 
-	bool b_send_empty = false;
+	bool b_send_empty = false; // send_empty according to the webpage of 'lab_faq.html'
 	if (header.ack && _sender.IsSYN_Sent())
 	{
 		// deal ack
@@ -62,6 +62,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 	{
 		_sender.stream_in().set_error();
 		_receiver.stream_out().set_error();
+		_rst = 1;
 		test_end();
 		return;
 	}
@@ -72,7 +73,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
             _sender.fill_window();
         if (_sender.segments_out().empty())     //send ACK
             b_send_empty=true;
-	} else if (seg.length_in_sequence_space()) {
+	} else if (seg.length_in_sequence_space() > 0) {
 		b_send_empty = true;
 	}
 
@@ -90,17 +91,17 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 
 bool TCPConnection::active() const {
 	// check byteStream of sender and reciever
-	if (_sender.stream_in().error() && _receiver.stream_out().error())
-		return false;
-
-	return (!_clean_shutdown) && (!_passive_close);
-
-	if (_passive_close)
-		return false;
-	else if (_clean_shutdown)
-		return false;
 	
-	return true;
+	if (_sender.stream_in().error() && _receiver.stream_out().error()) // rst
+		return false;
+
+	if (_clean_shutdown_1)
+		return false;
+	else if (_clean_shutdown_2)
+		return false;
+	else
+		return true;
+	
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -167,15 +168,16 @@ TCPConnection::~TCPConnection() {
             cerr << "Warning: Unclean shutdown of TCPConnection\n";
 
             // Your code here: need to send a RST segment to the peer
-			WrappingInt32 isn = _cfg.fixed_isn.value_or(WrappingInt32{random_device()()});
-			
 			TCPSegment seg;
-			seg.header().seqno = wrap(_sender.next_seqno_absolute(), isn);
 			seg.header().rst = true;
-			_segments_out.push(seg);
+			_sender.send_non_empty_segment(seg);
+
+			fill_queue();
 
 			_sender.stream_in().set_error();
 			_receiver.stream_out().set_error();
+
+			_rst = true;
         }
     } catch (const exception &e) {
         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;
@@ -185,21 +187,22 @@ TCPConnection::~TCPConnection() {
 void TCPConnection::test_end()
 {
 	if (_receiver.stream_out().input_ended()
-		&& not _sender.stream_in().eof())// all received and sent)
+		&& not _sender.stream_in().eof()
+		&& _sender.IsSYN_Sent())// all received and sent)
 	{
-		_linger_after_streams_finish = false;
+		_linger_after_streams_finish = false; // manual of 5.1
 	}
 
 	// Prerequest of #1 and #3
 	if (_receiver.unassembled_bytes() == 0
 		&& _receiver.stream_out().eof()
 		&& _sender.bytes_in_flight() == 0
-		&& _receiver.stream_out().eof() 
-		&& _sender.IsFIN_Sent())
+		&& _sender.stream_in().eof())
 	{
-		_clean_shutdown |= (time_since_last_segment_received() >= 10*_cfg.rt_timeout);
-
-		_passive_close |= (!_linger_after_streams_finish);
+		if ((time_since_last_segment_received() >= 10*_cfg.rt_timeout))
+			_clean_shutdown_1 = true;
+		if (_linger_after_streams_finish == false)
+			_clean_shutdown_2 = true;
 	}
 }
 
