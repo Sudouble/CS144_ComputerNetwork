@@ -42,14 +42,15 @@ class TCPSender {
 
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
-	uint64_t _alive_time{0};
-	unsigned int _rto{0};
-	unsigned int _retransmissionTimer{0};
-	unsigned int _consecutive_retransmission{0};
-	size_t _byte_in_flight{0};
-	uint16_t _notifyWinSize{1};
-	bool _fin_sent{false};
-  bool _syn_sent{false};
+    uint64_t _alive_time{0};
+    unsigned int _rto{0};
+    unsigned int _retransmissionTimer{0};
+    unsigned int _consecutive_retransmission{0};
+    size_t _byte_in_flight{0};
+    uint16_t _notifyWinSize{1};
+    size_t _abs_ackno{0};
+    bool _fin_sent{false};
+    bool _syn_sent{false};
 	
 	
 	std::map<uint64_t, ST_RETRANSSMIT_PACKET> mapOutstandingSegment = {};
@@ -111,6 +112,8 @@ class TCPSender {
     //! \brief relative seqno for the next byte to be sent
     WrappingInt32 next_seqno() const { return wrap(_next_seqno, _isn); }
     //!@}
+
+    void send_non_empty_segment(TCPSegment &seg);
 
     bool IsSYN_Sent() const {return _syn_sent; }
     bool IsFIN_Sent() const {return _fin_sent; }

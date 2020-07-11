@@ -75,6 +75,9 @@ int main() {
                     size_t seg2_first = seg2_hdr.seqno - ack_base - 1;
                     copy(seg2.payload().str().cbegin(), seg2.payload().str().cend(), d_out.begin() + seg2_first);
                 }
+                // cerr << "bytes_read:" << bytes_read 
+                //      << " + max_playLoad:" << TCPConfig::MAX_PAYLOAD_SIZE 
+                //      << " < swin:" << swin << " ? "<< endl;
                 test_err_if(  // correct number of bytes sent
                     bytes_read + TCPConfig::MAX_PAYLOAD_SIZE < swin,
                     "test 1 failed: sender did not fill window");

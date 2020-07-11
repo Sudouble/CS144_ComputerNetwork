@@ -23,7 +23,9 @@ class TCPConnection {
 	size_t _last_seg_recv_time{0};
 	size_t _tick_time{0};
 	bool _sync_sent{false};
-  bool _clean_shutdown{false};
+  bool _clean_shutdown_1{false};
+  bool _clean_shutdown_2{false};
+  bool _rst{false};
 
   public:
     //! \name "Input" interface for the writer

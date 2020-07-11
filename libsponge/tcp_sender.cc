@@ -33,54 +33,53 @@ uint64_t TCPSender::bytes_in_flight() const { return {_byte_in_flight}; }
 void TCPSender::fill_window() {
 	if (_fin_sent)
 		return;
-	
-	size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
-	
-	// syn?
-	size_t n_read_current = min(_notifyWinSize, static_cast<uint16_t>(max_payload_size));	
-
-	TCPSegment tcpSegment;	
+		
 	if (_next_seqno == 0)
 	{
+		TCPSegment tcpSegment;
 		// sync pack
 		_syn_sent = true;
 		tcpSegment.header().syn = true;
+
+		send_non_empty_segment(tcpSegment);
+		return;		
 	}
-	else
+
+	size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;	
+	while (_notifyWinSize) // can send
 	{
-		Buffer buffer((_stream.read(n_read_current)));
-		
-		//cerr << "writing buffer:" << buffer.copy() << endl;
-		tcpSegment.payload() = buffer;
-		
-		if (_stream.input_ended() && tcpSegment.length_in_sequence_space() < _notifyWinSize)
+		//if (_stream.eof() && tcpSegment.length_in_sequence_space() < _notifyWinSize)
+		if (_stream.eof() && !_fin_sent)
 		{
+			TCPSegment tcpSegment;	
 			tcpSegment.header().fin = true;
 			_fin_sent = true;
+			send_non_empty_segment(tcpSegment);
+			return;
+		} else if (_stream.eof()) {
+			return;
+		}
+		else{
+			// read ad many as possible, said by Manul if fill_window
+			uint16_t n_read_current = min(_notifyWinSize, static_cast<uint16_t>(max_payload_size));
+			Buffer buffer(std::move(_stream.read(n_read_current)));
+			// cerr << "read from _stream:" << buffer.copy() << endl;
+
+			TCPSegment tcpSegment;
+			tcpSegment.payload() = buffer;
+			if (_stream.input_ended() && tcpSegment.length_in_sequence_space() < _notifyWinSize)
+			{
+				tcpSegment.header().fin = true;
+				_fin_sent = true;
+			}
+
+			if (tcpSegment.length_in_sequence_space() == 0)
+				return;
+
+			send_non_empty_segment(tcpSegment);
+			_notifyWinSize -= tcpSegment.length_in_sequence_space();
 		}
 	}
-	
-	auto nlen = tcpSegment.length_in_sequence_space();	
-	if (nlen)
-	{
-		tcpSegment.header().seqno = wrap(_next_seqno, _isn);
-		
-		// to queue
-		_segments_out.push(tcpSegment);
-		
-		// to buffer
-		ST_RETRANSSMIT_PACKET stPack;
-		stPack.tcpSegment = tcpSegment;
-		stPack.send_time = 0;
-		mapOutstandingSegment.insert(make_pair(_next_seqno, stPack));
-	}
-	
-	//cerr << "nlen:" << nlen << "queue length:" << _segments_out.size() << endl;
-	
-	///
-	_next_seqno += nlen;
-	_byte_in_flight += nlen;
-	_notifyWinSize -= nlen;
 }
 
 //! \param ackno The remote receiver's ackno (acknowledgment number)
@@ -134,6 +133,9 @@ bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 	_consecutive_retransmission = 0;
 	
 	_rto = _initial_retransmission_timeout;
+
+	// fill next
+	fill_window();
 	
     return true;
 }
@@ -143,10 +145,12 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 	// update total
 	_alive_time += ms_since_last_tick;
 	
-	// check earliest segment	
-	_retransmissionTimer += ms_since_last_tick;
+	// check earliest segment if has!!
+	if (not mapOutstandingSegment.empty())
+		_retransmissionTimer += ms_since_last_tick;
 	
-	//cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
+	// cerr << " invoke tick with last_tick:" << ms_since_last_tick 
+	// 	 << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
 	
 	if (_retransmissionTimer >= _rto)
 	{
@@ -155,6 +159,12 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 
 		auto it = mapOutstandingSegment.begin();
 		_segments_out.push(it->second.tcpSegment);
+
+		// TCPHeader &hdr = it->second.tcpSegment.header();
+		// cerr << "hdr info:" << hdr.to_string()
+		// 	 << " payload:" << it->second.tcpSegment.payload().size()
+		// 	 << " segment_size:" << _segments_out.size()
+		// 	 << endl;
 			
 		if (_notifyWinSize!=0 || _next_seqno==1) {	
 			_rto *= 2;		
@@ -164,8 +174,6 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 
 		_retransmissionTimer = 0;
 	}
-	
-	//cerr << "tick queue size 2:" << _segments_out.size() << endl;
 }
 
 unsigned int TCPSender::consecutive_retransmissions() const { return {_consecutive_retransmission}; }
@@ -174,4 +182,20 @@ void TCPSender::send_empty_segment() {
 	TCPSegment seg;
 	seg.header().seqno = wrap(_next_seqno, _isn);
 	_segments_out.push(seg);
+}
+
+void TCPSender::send_non_empty_segment(TCPSegment &seg){
+    seg.header().seqno = wrap(_next_seqno, _isn);    
+    
+	// to queue
+	_segments_out.push(seg);
+	
+	// to buffer
+	ST_RETRANSSMIT_PACKET stPack;
+	stPack.tcpSegment = seg;
+	stPack.send_time = 0;
+	mapOutstandingSegment.insert(make_pair(_next_seqno, stPack));
+
+	_next_seqno += seg.length_in_sequence_space();
+    _byte_in_flight += seg.length_in_sequence_space();
 }

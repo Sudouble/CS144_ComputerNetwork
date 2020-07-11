@@ -19,6 +19,7 @@ int main() {
 
         // test #1: start in LAST_ACK, ack
         {
+            cerr << "test 1 begin." << endl;
             TCPTestHarness test_1 = TCPTestHarness::in_last_ack(cfg);
 
             test_1.execute(Tick(4 * cfg.rt_timeout));
@@ -38,12 +39,13 @@ int main() {
             test_2.execute(Tick(4 * cfg.rt_timeout));
 
             test_2.execute(ExpectState{State::CLOSE_WAIT});
-
+            
             test_2.execute(Close{});
+            
             test_2.execute(Tick(1));
 
             test_2.execute(ExpectState{State::LAST_ACK});
-
+            
             TCPSegment seg1 = test_2.expect_seg(ExpectOneSegment{}.with_fin(true), "test 2 falied: bad seg or no FIN");
 
             test_2.execute(Tick(cfg.rt_timeout - 2));
@@ -66,6 +68,8 @@ int main() {
             test_2.execute(Tick(1));
 
             test_2.execute(ExpectState{State::CLOSED});
+
+            cerr << "test 2 finished." << endl;
         }
 
         // test #3: start in ESTABLSHED, send FIN, recv ACK, check for CLOSE_WAIT
