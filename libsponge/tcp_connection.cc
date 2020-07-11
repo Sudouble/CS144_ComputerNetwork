@@ -92,10 +92,9 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 bool TCPConnection::active() const {
 	// check byteStream of sender and reciever
 	
-	if (_sender.stream_in().error() && _receiver.stream_out().error()) // rst
+	if (_rst)
 		return false;
-
-	if (_clean_shutdown_1)
+	else if (_clean_shutdown_1)
 		return false;
 	else if (_clean_shutdown_2)
 		return false;
@@ -150,7 +149,7 @@ void TCPConnection::end_input_stream() {
 }
 
 void TCPConnection::connect() {
-	if (not _sender.IsSYN_Sent())
+	if (not _sender.IsSYN_Sent() && not _rst)
 	{
 		_sync_sent = true;
 		
@@ -212,17 +211,17 @@ void TCPConnection::fill_queue()
 	while(!_sender.segments_out().empty())
 	{
 		TCPSegment segment = _sender.segments_out().front();
-		if (_receiver.ackno().has_value()) {  // deal with ack
-        	segment.header().ackno = _receiver.ackno().value();
-        	segment.header().ack = true;
-    	}
-		
-		if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS)
-		{
-			WrappingInt32 isn = _cfg.fixed_isn.value_or(WrappingInt32{random_device()()});
+		_sender.segments_out().pop();	
 
-			segment.header().rst = 1;			
-			segment.header().seqno = wrap(_sender.next_seqno_absolute(), isn);
+		cerr << "segment:" << segment.header().to_string() << endl;
+		
+		if (_rst || _sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS)
+		{
+			segment.header().rst = 1;
+
+			_rst = 1;
+			_sender.stream_in().set_error();
+			_receiver.stream_out().set_error();
 		}
 		else
 		{
@@ -232,10 +231,14 @@ void TCPConnection::fill_queue()
             	segment.header().win = numeric_limits<uint16_t>::max();
 		}
 
+		if (_receiver.ackno().has_value() && _rst == false) {  // deal with ack
+        	segment.header().ackno = _receiver.ackno().value();
+        	segment.header().ack = true;
+    	}
+
 		n_size_count += segment.length_in_sequence_space();
-		
-		_segments_out.push(segment);
-		_sender.segments_out().pop();
+				
+		_segments_out.push(segment);		
 	}
 
 	// cerr << "TCPConnection::fill_queue() size:" << _segments_out.size() << endl;

@@ -145,11 +145,12 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 	// update total
 	_alive_time += ms_since_last_tick;
 	
-	// check earliest segment	
-	_retransmissionTimer += ms_since_last_tick;
+	// check earliest segment if has!!
+	if (not mapOutstandingSegment.empty())
+		_retransmissionTimer += ms_since_last_tick;
 	
-	//cerr << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
-	cerr << " invoke tick with last_tick:" << ms_since_last_tick << endl;
+	// cerr << " invoke tick with last_tick:" << ms_since_last_tick 
+	// 	 << "currentTimer:" << _retransmissionTimer << " _rto:" << _rto << endl;
 	
 	if (_retransmissionTimer >= _rto)
 	{
@@ -173,8 +174,6 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 
 		_retransmissionTimer = 0;
 	}
-	
-	//cerr << "tick queue size 2:" << _segments_out.size() << endl;
 }
 
 unsigned int TCPSender::consecutive_retransmissions() const { return {_consecutive_retransmission}; }
@@ -196,8 +195,6 @@ void TCPSender::send_non_empty_segment(TCPSegment &seg){
 	stPack.tcpSegment = seg;
 	stPack.send_time = 0;
 	mapOutstandingSegment.insert(make_pair(_next_seqno, stPack));
-
-	cerr << "seg content in send_non_empty_segment:" << seg.header().to_string()<< endl << endl;
 
 	_next_seqno += seg.length_in_sequence_space();
     _byte_in_flight += seg.length_in_sequence_space();
