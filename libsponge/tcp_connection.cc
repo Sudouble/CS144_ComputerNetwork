@@ -212,8 +212,6 @@ void TCPConnection::fill_queue()
 	{
 		TCPSegment segment = _sender.segments_out().front();
 		_sender.segments_out().pop();	
-
-		cerr << "segment:" << segment.header().to_string() << endl;
 		
 		if (_rst || _sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS)
 		{
@@ -240,6 +238,4 @@ void TCPConnection::fill_queue()
 				
 		_segments_out.push(segment);		
 	}
-
-	// cerr << "TCPConnection::fill_queue() size:" << _segments_out.size() << endl;
 }
