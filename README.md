@@ -1,4 +1,4 @@
-Labs state:
+## Labs state:
 - [x] lab0_networking warmup
 - [x] lab1_stitching substrings into a byte stream
 - [x] lab2_the TCP receiver
