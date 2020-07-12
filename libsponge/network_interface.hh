@@ -7,6 +7,23 @@
 
 #include <optional>
 #include <queue>
+#include <map>
+
+struct Stored_EthernetFrame {
+  Address next_hop{"0.0.0.0", 1};
+  //EthernetFrame dgram{};  
+  Buffer buff{};
+};
+
+const size_t ARP_EA_VALID_TIME = 30*1000l;
+struct ARP_INFO{
+  size_t _passed_send_time{0}; // the timer arp just sent;
+  bool _arp_msg_sent{false};
+
+  bool _Is_EA_valid{false};
+  size_t EA_alive_time{0}; // when EA is valid, begin this timer of 30s
+  EthernetAddress _ethernet_address{};
+};
 
 //! \brief A "network interface" that connects IP (the internet layer, or network layer)
 //! with Ethernet (the network access layer, or link layer).
@@ -39,6 +56,9 @@ class NetworkInterface {
 
     //! outbound queue of Ethernet frames that the NetworkInterface wants sent
     std::queue<EthernetFrame> _frames_out{};
+
+    std::queue<EthernetFrame> _frames_before_ARP{};
+    std::map<uint32_t, ARP_INFO> _mapIP2Info{};
 
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
