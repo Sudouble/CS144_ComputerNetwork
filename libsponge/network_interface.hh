@@ -8,12 +8,7 @@
 #include <optional>
 #include <queue>
 #include <map>
-
-struct Stored_EthernetFrame {
-  Address next_hop{"0.0.0.0", 1};
-  //EthernetFrame dgram{};  
-  Buffer buff{};
-};
+#include <sstream>
 
 const size_t ARP_EA_VALID_TIME = 30*1000l;
 struct ARP_INFO{
@@ -21,8 +16,17 @@ struct ARP_INFO{
   bool _arp_msg_sent{false};
 
   bool _Is_EA_valid{false};
-  size_t EA_alive_time{0}; // when EA is valid, begin this timer of 30s
+  size_t EA_alived_time{0}; // when EA is valid, begin this timer of 30s
   EthernetAddress _ethernet_address{};
+
+  std::string to_string() {
+    std::stringstream ss{};
+    ss << "send time passed=" << _passed_send_time 
+       << ", _arp_msg_sent=" << _arp_msg_sent
+       << ", _Is_EA_valid=" << _Is_EA_valid
+       << ", EA_alived_time=" << EA_alived_time;
+    return ss.str();
+  }
 };
 
 //! \brief A "network interface" that connects IP (the internet layer, or network layer)

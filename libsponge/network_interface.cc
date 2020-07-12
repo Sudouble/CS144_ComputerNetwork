@@ -45,7 +45,7 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
         hdr.dst = _mapIP2Info[next_hop_ip]._ethernet_address;        
         hdr.type = EthernetHeader::TYPE_IPv4;
 
-        _frame_ethernet.payload() = dgram.payload();
+        _frame_ethernet.payload() = dgram.serialize();
 
         _frames_out.push(_frame_ethernet);
     }
@@ -57,13 +57,20 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
             _mapIP2Info.insert(make_pair(next_hop_ip, arp_info));
         }
 
+        cerr << _mapIP2Info[next_hop_ip].to_string() << endl;
+
         if (_mapIP2Info[next_hop_ip]._arp_msg_sent
             && _mapIP2Info[next_hop_ip]._passed_send_time <= 5000)
         {
             // wait 5000ms, don't overflow the network
         }
+        else if (_mapIP2Info[next_hop_ip]._Is_EA_valid
+            && _mapIP2Info[next_hop_ip].EA_alived_time <= ARP_EA_VALID_TIME)
+            {
+
+            }
         else
-        {            
+        {
             ARPMessage _ARP_msg;
             _ARP_msg.sender_ethernet_address = _ethernet_address;        
             _ARP_msg.sender_ip_address = _ip_address.ipv4_numeric();
@@ -81,13 +88,9 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
             _frame_ethernet.payload().append(Buffer(_ARP_msg.serialize()));
 
             _frames_out.push(_frame_ethernet);
-        }        
 
-        // push the unkown to queue;
-        Stored_EthernetFrame stStore;
-        //stStore.dgram = std::move(dgram);
-        stStore.buff = Buffer(std::move(dgram.serialize().concatenate()));
-        stStore.next_hop = next_hop;
+            _mapIP2Info[next_hop_ip]._arp_msg_sent = true;
+        }
 
         {
             EthernetFrame _frame_ethernet;
@@ -108,14 +111,18 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
 optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &frame) {
     // DUMMY_CODE(frame);
 
-    const EthernetHeader& hdr = frame.header();
-    Buffer buff(std::move(frame.payload().concatenate()));
+    const EthernetHeader& hdr = frame.header();    
 
     if (hdr.type == EthernetHeader::TYPE_IPv4)
     {
-        InternetDatagram frame_parse;
-        if (frame_parse.parse(buff) != ParseResult::NoError)
+        if (hdr.dst != _ethernet_address)
             return {};
+
+        InternetDatagram frame_parse;
+
+        Buffer buff(std::move(frame.payload().concatenate()));
+        if (frame_parse.parse(buff) != ParseResult::NoError)
+            return {};        
         
         return frame_parse;
     }
@@ -123,7 +130,11 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
     {        
         // if recv arp request
         ARPMessage arpMsg;
+        Buffer buff(std::move(frame.payload().concatenate()));
         if (arpMsg.parse(buff) != ParseResult::NoError)
+            return {};
+
+        if (arpMsg.target_ip_address != _ip_address.ipv4_numeric())
             return {};
 
         // cerr << "==========here comes the APR." 
@@ -139,8 +150,9 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
                 return {};
 
             ARP_INFO& arpInfo = _mapIP2Info[next_hop_ip];
+            arpInfo._arp_msg_sent = false;
             arpInfo._Is_EA_valid = true;
-            arpInfo.EA_alive_time = 0;
+            arpInfo.EA_alived_time = 0;
             arpInfo._ethernet_address = arpMsg.sender_ethernet_address;
 
             // sender buff in queue
@@ -149,7 +161,7 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
                 EthernetFrame& _frame_ethernet = _frames_before_ARP.front();
                 EthernetHeader& hdrOut = _frame_ethernet.header();
                 hdrOut.src = _ethernet_address;
-                hdrOut.dst = arpMsg.sender_ethernet_address;
+                hdrOut.dst = arpInfo._ethernet_address;
 
                 // send and pop this one;
                 _frames_out.push(_frame_ethernet);
@@ -163,8 +175,9 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
             uint32_t sender_ip = arpMsg.sender_ip_address;
 
             ARP_INFO arpInfo;
+            arpInfo._arp_msg_sent = false;
             arpInfo._Is_EA_valid = true;
-            arpInfo.EA_alive_time = 0;
+            arpInfo.EA_alived_time = 0;
             arpInfo._ethernet_address = arpMsg.sender_ethernet_address;
 
             _mapIP2Info[sender_ip] = arpInfo;
@@ -176,14 +189,12 @@ optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &fra
             _ARP_msg.sender_ip_address = _ip_address.ipv4_numeric();
             _ARP_msg.target_ethernet_address = arpMsg.sender_ethernet_address;
             _ARP_msg.target_ip_address = arpMsg.sender_ip_address;
-            
-            _ARP_msg.target_ip_address = _ip_address.ipv4_numeric();
             _ARP_msg.opcode = ARPMessage::OPCODE_REPLY;
 
             EthernetFrame _frame_ethernet;
             EthernetHeader& hdrOut = _frame_ethernet.header();
             hdrOut.src = _ethernet_address;
-            hdrOut.dst = _ARP_msg.sender_ethernet_address;
+            hdrOut.dst = _ARP_msg.target_ethernet_address;
             hdrOut.type = EthernetHeader::TYPE_ARP;
             _frame_ethernet.payload().append(Buffer(_ARP_msg.serialize()));
 
@@ -210,11 +221,15 @@ void NetworkInterface::tick(const size_t ms_since_last_tick) {
         if (arpInfo._arp_msg_sent && not arpInfo._Is_EA_valid)
         {
             arpInfo._passed_send_time += ms_since_last_tick;
+            if (arpInfo._passed_send_time >= 5000)
+            {
+                arpInfo._arp_msg_sent = false;
+            }
         }
         else if (arpInfo._Is_EA_valid && not arpInfo._arp_msg_sent)
         {
-            arpInfo.EA_alive_time += ms_since_last_tick;
-            if (arpInfo.EA_alive_time >= ARP_EA_VALID_TIME)
+            arpInfo.EA_alived_time += ms_since_last_tick;
+            if (arpInfo.EA_alived_time >= ARP_EA_VALID_TIME)
             {
                 arpInfo._Is_EA_valid = false;
             }
