@@ -78,10 +78,7 @@ int8_t Router::calc_longest_match(const uint32_t route_prefix, const uint8_t pre
             break;
         ++_count_prefix;
     }
-
-    if (prefix_length == _count_prefix)
-        return _count_prefix;
-    else return 0;
+    return prefix_length == _count_prefix ? _count_prefix : 0;
 }
 
 void Router::route() {
