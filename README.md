@@ -5,7 +5,7 @@
 - [x] lab3_the TCP sender
 - [ ] lab4_the summit (TCP in full)---part of it is ok, not done yet
 - [x] lab5_down the stack (the network interface)
-- [ ] lab6_ building an IP router
+- [x] lab6_ building an IP router
 
 For build prereqs, see [the CS144 VM setup instructions](https://web.stanford.edu/class/cs144/vm_howto).
 

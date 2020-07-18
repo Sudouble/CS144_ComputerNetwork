@@ -29,14 +29,81 @@ void Router::add_route(const uint32_t route_prefix,
     cerr << "DEBUG: adding route " << Address::from_ipv4_numeric(route_prefix).ip() << "/" << int(prefix_length)
          << " => " << (next_hop.has_value() ? next_hop->ip() : "(direct)") << " on interface " << interface_num << "\n";
 
-    DUMMY_CODE(route_prefix, prefix_length, next_hop, interface_num);
+    // DUMMY_CODE(route_prefix, prefix_length, next_hop, interface_num);
     // Your code here.
+    ST_ROUTE_TABLE stTable;
+    stTable.route_prefix = route_prefix;
+    stTable.prefix_length = prefix_length;
+    stTable.next_hop = next_hop;
+    stTable.inferface_num = interface_num;
+
+    _route_table.push_back(stTable);
 }
 
 //! \param[in] dgram The datagram to be routed
 void Router::route_one_datagram(InternetDatagram &dgram) {
-    DUMMY_CODE(dgram);
+    // DUMMY_CODE(dgram);
     // Your code here.
+    
+    // ttl check
+    IPv4Header& header = dgram.header();
+    if (header.ttl == 0 || header.ttl == 1)
+    {
+        cerr << "return with ttl = 0 or 1" << endl;
+        return;
+    }
+
+    // longest frefix match check
+    size_t max_result_index = 0;
+    int8_t max_prefix = -1;
+    for (size_t i = 0; i < _route_table.size(); ++i)
+    {
+        ST_ROUTE_TABLE& table = _route_table.at(i);
+        int8_t cal_result = calc_longest_match(table.route_prefix, table.prefix_length, header.dst);
+        if (cal_result > max_prefix)
+        {
+            max_prefix = cal_result;
+            max_result_index = i;
+
+            cerr << "update with table info: " << table.to_string() 
+                 << ", match length:" << int(cal_result)
+                 << ", table size:" << _route_table.size() << endl;
+        }
+    }
+
+    // try send
+    ST_ROUTE_TABLE& table = _route_table.at(max_result_index);
+
+    Address addrSend = table.next_hop.has_value() ? table.next_hop.value() :  Address::from_ipv4_numeric(header.dst);
+
+    --header.ttl;
+    interface(table.inferface_num).send_datagram(dgram, addrSend);
+    
+}
+
+int8_t Router::calc_longest_match(const uint32_t route_prefix, const uint8_t prefix_length, const uint32_t dst)
+{
+    if (prefix_length > 32)
+        return 0;
+
+    uint8_t _count_prefix = 0;    
+    for (uint8_t i = 0; i < prefix_length; i++)
+    {
+        uint8_t src = (route_prefix >> (31 - i)) & 0x01;
+        uint8_t dest = (dst >> (31 - i)) & 0x01;
+        if (src != dest)
+            break;
+
+        ++_count_prefix;
+    }
+
+    // cerr << "route_prefix:" << Address::from_ipv4_numeric(route_prefix).ip() << "/" << int(prefix_length)
+    //      << ", dst:" << Address::from_ipv4_numeric(dst).ip()
+    //      << ", _count_prefix:" << int(_count_prefix) << endl;
+
+    if (prefix_length == _count_prefix)
+        return _count_prefix;
+    else return 0;
 }
 
 void Router::route() {
