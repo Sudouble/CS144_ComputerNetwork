@@ -44,14 +44,9 @@ void Router::add_route(const uint32_t route_prefix,
 void Router::route_one_datagram(InternetDatagram &dgram) {
     // DUMMY_CODE(dgram);
     // Your code here.
-    
-    // ttl check
-    IPv4Header& header = dgram.header();
+    IPv4Header& header = dgram.header();    
     if (header.ttl == 0 || header.ttl == 1)
-    {
-        cerr << "return with ttl = 0 or 1" << endl;
-        return;
-    }
+        return; // drop
 
     // longest frefix match check
     size_t max_result_index = 0;
@@ -64,28 +59,16 @@ void Router::route_one_datagram(InternetDatagram &dgram) {
         {
             max_prefix = cal_result;
             max_result_index = i;
-
-            cerr << "update with table info: " << table.to_string() 
-                 << ", match length:" << int(cal_result)
-                 << ", table size:" << _route_table.size() << endl;
         }
     }
-
-    // try send
-    ST_ROUTE_TABLE& table = _route_table.at(max_result_index);
-
-    Address addrSend = table.next_hop.has_value() ? table.next_hop.value() :  Address::from_ipv4_numeric(header.dst);
-
     --header.ttl;
+    ST_ROUTE_TABLE& table = _route_table.at(max_result_index);
+    Address addrSend = table.next_hop.has_value() ? table.next_hop.value() :  Address::from_ipv4_numeric(header.dst);    
     interface(table.inferface_num).send_datagram(dgram, addrSend);
-    
 }
 
 int8_t Router::calc_longest_match(const uint32_t route_prefix, const uint8_t prefix_length, const uint32_t dst)
 {
-    if (prefix_length > 32)
-        return 0;
-
     uint8_t _count_prefix = 0;    
     for (uint8_t i = 0; i < prefix_length; i++)
     {
@@ -93,13 +76,8 @@ int8_t Router::calc_longest_match(const uint32_t route_prefix, const uint8_t pre
         uint8_t dest = (dst >> (31 - i)) & 0x01;
         if (src != dest)
             break;
-
         ++_count_prefix;
     }
-
-    // cerr << "route_prefix:" << Address::from_ipv4_numeric(route_prefix).ip() << "/" << int(prefix_length)
-    //      << ", dst:" << Address::from_ipv4_numeric(dst).ip()
-    //      << ", _count_prefix:" << int(_count_prefix) << endl;
 
     if (prefix_length == _count_prefix)
         return _count_prefix;
